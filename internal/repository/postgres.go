@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,8 +15,20 @@ import (
 	"github.com/MaxPa1/Gofermart/migrations"
 )
 
-func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+type PoolConfig struct {
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
+}
+
+func NewPool(ctx context.Context, dsn string, cfg PoolConfig) (*pgxpool.Pool, error) {
+	poolCfg, err := newPoolConfig(dsn, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pgx pool: %w", err)
 	}
@@ -26,6 +39,21 @@ func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+}
+
+func newPoolConfig(dsn string, cfg PoolConfig) (*pgxpool.Config, error) {
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, errors.New("parse database URI: invalid format")
+	}
+
+	poolCfg.MaxConns = cfg.MaxConns
+	poolCfg.MinConns = cfg.MinConns
+	poolCfg.MaxConnLifetime = cfg.MaxConnLifetime
+	poolCfg.MaxConnIdleTime = cfg.MaxConnIdleTime
+	poolCfg.MaxConnLifetimeJitter = cfg.MaxConnLifetime / 10
+
+	return poolCfg, nil
 }
 
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
