@@ -17,6 +17,7 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/config"
 	"github.com/MaxPa1/Gofermart/internal/repository"
 	"github.com/MaxPa1/Gofermart/internal/service/auth"
+	"github.com/MaxPa1/Gofermart/internal/service/orders"
 	"github.com/MaxPa1/Gofermart/internal/transport/rest"
 	"github.com/MaxPa1/Gofermart/internal/transport/rest/handler"
 )
@@ -72,9 +73,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	authHandler := handler.NewAuthHandler(authService, logger, cfg.SecureCookie)
 
+	ordersRepo := repository.NewOrderRepository(pool)
+	ordersService := orders.NewService(ordersRepo)
+	ordersHandler := handler.NewOrdersHandler(ordersService, logger)
+
 	srv := &http.Server{
 		Addr:              cfg.RunAddress,
-		Handler:           rest.NewRouter(logger, tokens, authHandler),
+		Handler:           rest.NewRouter(logger, tokens, authHandler, ordersHandler),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,

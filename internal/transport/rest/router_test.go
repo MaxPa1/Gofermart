@@ -39,9 +39,16 @@ type fakeTokenParser struct{}
 
 func (fakeTokenParser) Parse(string) (int64, error) { return 1, nil }
 
+type fakeOrdersService struct{}
+
+func (fakeOrdersService) Upload(context.Context, int64, string) error { return nil }
+
+func (fakeOrdersService) List(context.Context, int64) ([]model.Order, error) { return nil, nil }
+
 func newTestRouter() http.Handler {
 	auth := handler.NewAuthHandler(fakeAuthService{}, zap.NewNop(), false)
-	return NewRouter(zap.NewNop(), fakeTokenParser{}, auth)
+	orders := handler.NewOrdersHandler(fakeOrdersService{}, zap.NewNop())
+	return NewRouter(zap.NewNop(), fakeTokenParser{}, auth, orders)
 }
 
 func TestRouter_Routes(t *testing.T) {
@@ -103,4 +110,32 @@ func TestRouter_GzipResponse(t *testing.T) {
 	body, err := io.ReadAll(zr)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "login is empty")
+}
+
+func TestRouter_OrdersRequireAuth(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		body       string
+		withCookie bool
+		wantStatus int
+	}{
+		{name: "upload without cookie", method: http.MethodPost, body: "12345678903", wantStatus: http.StatusUnauthorized},
+		{name: "list without cookie", method: http.MethodGet, wantStatus: http.StatusUnauthorized},
+		{name: "upload with cookie", method: http.MethodPost, body: "12345678903", withCookie: true, wantStatus: http.StatusAccepted},
+		{name: "list with cookie", method: http.MethodGet, withCookie: true, wantStatus: http.StatusNoContent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, "/api/user/orders", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "text/plain")
+			if tt.withCookie {
+				req.AddCookie(&http.Cookie{Name: middleware.AuthCookieName, Value: testToken})
+			}
+			rec := httptest.NewRecorder()
+			newTestRouter().ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
+	}
 }

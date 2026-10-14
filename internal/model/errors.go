@@ -10,4 +10,10 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 
 	ErrInvalidInput = errors.New("invalid input")
+
+	ErrInvalidOrderNumber = errors.New("invalid order number")
+
+	ErrOrderAlreadyUploaded = errors.New("order already uploaded by this user")
+
+	ErrOrderOwnedByAnother = errors.New("order already uploaded by another user")
 )

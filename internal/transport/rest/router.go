@@ -12,7 +12,12 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/transport/rest/middleware"
 )
 
-func NewRouter(logger *zap.Logger, tokens middleware.TokenParser, auth *handler.AuthHandler) http.Handler {
+func NewRouter(
+	logger *zap.Logger,
+	tokens middleware.TokenParser,
+	auth *handler.AuthHandler,
+	orders *handler.OrdersHandler,
+) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(
@@ -29,6 +34,9 @@ func NewRouter(logger *zap.Logger, tokens middleware.TokenParser, auth *handler.
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(tokens))
+
+			r.Post("/orders", orders.Upload)
+			r.Get("/orders", orders.List)
 		})
 	})
 
