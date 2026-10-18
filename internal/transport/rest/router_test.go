@@ -45,10 +45,23 @@ func (fakeOrdersService) Upload(context.Context, int64, string) error { return n
 
 func (fakeOrdersService) List(context.Context, int64) ([]model.Order, error) { return nil, nil }
 
+type fakeBalanceService struct{}
+
+func (fakeBalanceService) Balance(context.Context, int64) (model.Balance, error) {
+	return model.Balance{}, nil
+}
+
+func (fakeBalanceService) Withdraw(context.Context, int64, string, model.Amount) error { return nil }
+
+func (fakeBalanceService) Withdrawals(context.Context, int64) ([]model.Withdrawal, error) {
+	return nil, nil
+}
+
 func newTestRouter() http.Handler {
 	auth := handler.NewAuthHandler(fakeAuthService{}, zap.NewNop(), false)
 	orders := handler.NewOrdersHandler(fakeOrdersService{}, zap.NewNop())
-	return NewRouter(zap.NewNop(), fakeTokenParser{}, auth, orders)
+	balance := handler.NewBalanceHandler(fakeBalanceService{}, zap.NewNop())
+	return NewRouter(zap.NewNop(), fakeTokenParser{}, auth, orders, balance)
 }
 
 func TestRouter_Routes(t *testing.T) {
@@ -136,6 +149,33 @@ func TestRouter_OrdersRequireAuth(t *testing.T) {
 			newTestRouter().ServeHTTP(rec, req)
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
+	}
+}
+
+func TestRouter_BalanceRequiresAuth(t *testing.T) {
+	tests := []struct {
+		method       string
+		path         string
+		body         string
+		wantWithAuth int
+	}{
+		{method: http.MethodGet, path: "/api/user/balance", wantWithAuth: http.StatusOK},
+		{method: http.MethodPost, path: "/api/user/balance/withdraw", body: `{"order":"2377225624","sum":751}`, wantWithAuth: http.StatusOK},
+		{method: http.MethodGet, path: "/api/user/withdrawals", wantWithAuth: http.StatusNoContent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			newTestRouter().ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusUnauthorized, rec.Code, "without cookie")
+
+			req = httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			req.AddCookie(&http.Cookie{Name: middleware.AuthCookieName, Value: testToken})
+			rec = httptest.NewRecorder()
+			newTestRouter().ServeHTTP(rec, req)
+			assert.Equal(t, tt.wantWithAuth, rec.Code, "with cookie")
 		})
 	}
 }

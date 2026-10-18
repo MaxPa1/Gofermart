@@ -16,4 +16,6 @@ var (
 	ErrOrderAlreadyUploaded = errors.New("order already uploaded by this user")
 
 	ErrOrderOwnedByAnother = errors.New("order already uploaded by another user")
+
+	ErrInsufficientFunds = errors.New("insufficient funds")
 )

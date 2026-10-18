@@ -17,6 +17,7 @@ func NewRouter(
 	tokens middleware.TokenParser,
 	auth *handler.AuthHandler,
 	orders *handler.OrdersHandler,
+	balance *handler.BalanceHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -37,6 +38,10 @@ func NewRouter(
 
 			r.Post("/orders", orders.Upload)
 			r.Get("/orders", orders.List)
+
+			r.Get("/balance", balance.Balance)
+			r.Post("/balance/withdraw", balance.Withdraw)
+			r.Get("/withdrawals", balance.Withdrawals)
 		})
 	})
 
