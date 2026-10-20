@@ -1,4 +1,3 @@
-// Package config загружает конфигурацию сервиса из флагов командной строки и переменных окружения.
 package config
 
 import (
@@ -26,6 +25,15 @@ type Config struct {
 	LogLevel     zapcore.Level `env:"LOG_LEVEL" envDefault:"info"`
 
 	DB DBConfig `envPrefix:"DB_"`
+
+	Accrual AccrualConfig `envPrefix:"ACCRUAL_"`
+}
+
+type AccrualConfig struct {
+	PollInterval   time.Duration `env:"POLL_INTERVAL" envDefault:"1s"`
+	BatchSize      int           `env:"BATCH_SIZE" envDefault:"50"`
+	Workers        int           `env:"WORKERS" envDefault:"4"`
+	RequestTimeout time.Duration `env:"REQUEST_TIMEOUT" envDefault:"5s"`
 }
 
 type DBConfig struct {
@@ -62,6 +70,8 @@ func (c Config) validate() error {
 		return fmt.Errorf("%w: run address is empty (-a / RUN_ADDRESS)", ErrInvalid)
 	case c.DatabaseURI == "":
 		return fmt.Errorf("%w: database URI is empty (-d / DATABASE_URI)", ErrInvalid)
+	case c.AccrualAddress == "":
+		return fmt.Errorf("%w: accrual system address is empty (-r / ACCRUAL_SYSTEM_ADDRESS)", ErrInvalid)
 	case c.TokenTTL <= 0:
 		return fmt.Errorf("%w: TOKEN_TTL must be positive, got %s", ErrInvalid, c.TokenTTL)
 	case c.DB.MaxConns < 1:
@@ -72,6 +82,14 @@ func (c Config) validate() error {
 		return fmt.Errorf("%w: DB_MAX_CONN_LIFETIME must be positive, got %s", ErrInvalid, c.DB.MaxConnLifetime)
 	case c.DB.MaxConnIdleTime <= 0:
 		return fmt.Errorf("%w: DB_MAX_CONN_IDLE_TIME must be positive, got %s", ErrInvalid, c.DB.MaxConnIdleTime)
+	case c.Accrual.PollInterval <= 0:
+		return fmt.Errorf("%w: ACCRUAL_POLL_INTERVAL must be positive, got %s", ErrInvalid, c.Accrual.PollInterval)
+	case c.Accrual.BatchSize < 1:
+		return fmt.Errorf("%w: ACCRUAL_BATCH_SIZE must be at least 1, got %d", ErrInvalid, c.Accrual.BatchSize)
+	case c.Accrual.Workers < 1:
+		return fmt.Errorf("%w: ACCRUAL_WORKERS must be at least 1, got %d", ErrInvalid, c.Accrual.Workers)
+	case c.Accrual.RequestTimeout <= 0:
+		return fmt.Errorf("%w: ACCRUAL_REQUEST_TIMEOUT must be positive, got %s", ErrInvalid, c.Accrual.RequestTimeout)
 	}
 	return nil
 }

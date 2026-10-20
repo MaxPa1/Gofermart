@@ -2,8 +2,6 @@ package model
 
 import "time"
 
-type Amount int64
-
 type OrderStatus string
 
 const (

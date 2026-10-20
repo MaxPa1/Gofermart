@@ -136,7 +136,7 @@ func decodeWithdrawRequest(w http.ResponseWriter, r *http.Request) (withdrawRequ
 		switch {
 		case errors.As(err, &maxBytesErr):
 			writeError(w, http.StatusRequestEntityTooLarge, "")
-		case errors.Is(err, errInvalidAmount):
+		case errors.Is(err, model.ErrInvalidAmount):
 			writeError(w, http.StatusBadRequest, "sum must be a number with at most two decimal places")
 		default:
 			writeError(w, http.StatusBadRequest, "invalid JSON body")

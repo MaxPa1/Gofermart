@@ -14,6 +14,7 @@ import (
 
 	"github.com/MaxPa1/Gofermart/internal/auth/password"
 	"github.com/MaxPa1/Gofermart/internal/auth/token"
+	accrualclient "github.com/MaxPa1/Gofermart/internal/client/accrual"
 	"github.com/MaxPa1/Gofermart/internal/config"
 	"github.com/MaxPa1/Gofermart/internal/repository"
 	"github.com/MaxPa1/Gofermart/internal/service/auth"
@@ -21,6 +22,7 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/service/orders"
 	"github.com/MaxPa1/Gofermart/internal/transport/rest"
 	"github.com/MaxPa1/Gofermart/internal/transport/rest/handler"
+	accrualworker "github.com/MaxPa1/Gofermart/internal/worker/accrual"
 )
 
 const (
@@ -82,6 +84,16 @@ func Run(ctx context.Context, cfg config.Config) error {
 	balanceService := balance.NewService(balanceRepo)
 	balanceHandler := handler.NewBalanceHandler(balanceService, logger)
 
+	accrual, err := accrualclient.New(cfg.AccrualAddress, cfg.Accrual.RequestTimeout)
+	if err != nil {
+		return fmt.Errorf("create accrual client: %w", err)
+	}
+	worker := accrualworker.New(accrual, repository.NewAccrualRepository(pool), accrualworker.Config{
+		PollInterval: cfg.Accrual.PollInterval,
+		BatchSize:    cfg.Accrual.BatchSize,
+		Workers:      cfg.Accrual.Workers,
+	}, logger)
+
 	srv := &http.Server{
 		Addr:              cfg.RunAddress,
 		Handler:           rest.NewRouter(logger, tokens, authHandler, ordersHandler, balanceHandler),
@@ -92,7 +104,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 		ErrorLog:          zap.NewStdLog(logger),
 	}
 
-	return serve(ctx, srv, logger)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return serve(gctx, srv, logger) })
+	g.Go(func() error { return worker.Run(gctx) })
+	return g.Wait()
 }
 
 func serve(ctx context.Context, srv *http.Server, logger *zap.Logger) error {
