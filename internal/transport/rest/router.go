@@ -1,3 +1,5 @@
+// Package rest — HTTP-транспорт сервиса: chi-роутер с маршрутами API «Гофермарт» и общей цепочкой
+// middleware.
 package rest
 
 import (
@@ -12,6 +14,8 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/transport/rest/middleware"
 )
 
+// NewRouter собирает HTTP-обработчик API. Каждый запрос проходит цепочку RequestID → Logger →
+// Recoverer → Decompress → Compress
 func NewRouter(
 	logger *zap.Logger,
 	tokens middleware.TokenParser,

@@ -16,8 +16,11 @@ import (
 
 const maxCredentialsBodySize = 4 << 10 // 4 КБ
 
+// AuthService — бизнес-логика регистрации и входа, которую использует AuthHandler.
 type AuthService interface {
+	// Register регистрирует пользователя и возвращает токен аутентификации.
 	Register(ctx context.Context, login, password string) (string, error)
+	// Login проверяет логин и пароль и возвращает токен аутентификации.
 	Login(ctx context.Context, login, password string) (string, error)
 }
 
@@ -26,6 +29,8 @@ type credentialsRequest struct {
 	Password string `json:"password"`
 }
 
+// AuthHandler обрабатывает регистрацию и вход пользователей. При успехе выдаёт токен в cookie
+// middleware.AuthCookieName с флагами HttpOnly и SameSite=Strict
 type AuthHandler struct {
 	auth         AuthService
 	logger       *zap.Logger
@@ -36,6 +41,12 @@ func NewAuthHandler(auth AuthService, logger *zap.Logger, secureCookie bool) *Au
 	return &AuthHandler{auth: auth, logger: logger, secureCookie: secureCookie}
 }
 
+// Register обрабатывает POST /api/user/register с JSON-телом {"login": "…", "password": "…"}. Ответы:
+//   - 200 — пользователь зарегистрирован и аутентифицирован, токен выдан в cookie;
+//   - 400 — неверный формат запроса;
+//   - 409 — логин уже занят;
+//   - 413 — тело запроса больше 4 КБ;
+//   - 500 — внутренняя ошибка сервера.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	req, ok := h.decodeCredentials(w, r)
 	if !ok {
@@ -58,6 +69,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	h.writeToken(w, token)
 }
 
+// Login обрабатывает POST /api/user/login с JSON-телом {"login": "…", "password": "…"}. Ответы:
+//   - 200 — пользователь аутентифицирован, токен выдан в cookie;
+//   - 400 — неверный формат запроса;
+//   - 401 — неверная пара логин/пароль;
+//   - 413 — тело запроса больше 4 КБ;
+//   - 500 — внутренняя ошибка сервера.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	req, ok := h.decodeCredentials(w, r)
 	if !ok {

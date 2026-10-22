@@ -1,3 +1,4 @@
+// Package migrations содержит SQL-миграции схемы базы данных в формате goose, вшитые в бинарь.
 package migrations
 
 import "embed"

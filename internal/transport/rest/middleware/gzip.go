@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// Decompress распаковывает тело запросов с заголовком Content-Encoding: gzip
 func Decompress(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.EqualFold(strings.TrimSpace(r.Header.Get("Content-Encoding")), "gzip") {

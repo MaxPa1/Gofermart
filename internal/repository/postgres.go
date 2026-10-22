@@ -1,3 +1,4 @@
+// Package repository реализует хранилище сервиса на PostgreSQL (драйвер pgx)
 package repository
 
 import (
@@ -15,13 +16,21 @@ import (
 	"github.com/MaxPa1/Gofermart/migrations"
 )
 
+// PoolConfig — параметры пула соединений.
+// подключения.
 type PoolConfig struct {
-	MaxConns        int32
-	MinConns        int32
+	// MaxConns — максимальное число соединений в пуле.
+	MaxConns int32
+	// MinConns — число соединений, которое пул держит открытыми без нагрузки.
+	MinConns int32
+	// MaxConnLifetime — максимальный срок жизни соединения.
 	MaxConnLifetime time.Duration
+	// MaxConnIdleTime — время простоя, после которого соединение закрывается.
 	MaxConnIdleTime time.Duration
 }
 
+// NewPool создаёт пул соединений с PostgreSQL по строке подключения dsn и параметрам cfg и проверяет
+// доступность базы запросом Ping.
 func NewPool(ctx context.Context, dsn string, cfg PoolConfig) (*pgxpool.Pool, error) {
 	poolCfg, err := newPoolConfig(dsn, cfg)
 	if err != nil {
@@ -56,6 +65,7 @@ func newPoolConfig(dsn string, cfg PoolConfig) (*pgxpool.Config, error) {
 	return poolCfg, nil
 }
 
+// Migrate применяет к базе все ещё не применённые миграции из migrations.FS. Использует goose
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

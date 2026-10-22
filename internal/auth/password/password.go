@@ -1,3 +1,4 @@
+// Package password хэширует пароли и сверяет их с хэшем алгоритмом bcrypt.
 package password
 
 import (
@@ -7,18 +8,24 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// MaxLength — максимальная длина пароля в байтах, которую поддерживает bcrypt.
 const MaxLength = 72
 
 var (
+	// ErrTooLong возвращается Hasher.Hash, если пароль длиннее MaxLength байт.
 	ErrTooLong = errors.New("password exceeds 72 bytes")
 
+	// ErrInvalidCost возвращается NewHasher, если Cost вне диапазона bcrypt.MinCost..bcrypt.MaxCost.
 	ErrInvalidCost = errors.New("bcrypt cost out of range")
 )
 
+// Hasher хэширует и проверяет пароли алгоритмом bcrypt с фиксированной Сost
 type Hasher struct {
 	cost int
 }
 
+// NewHasher создаёт Hasher со стоимостью cost. Возвращает
+// ошибку ErrInvalidCost, если cost вне диапазона bcrypt.MinCost..bcrypt.MaxCost.
 func NewHasher(cost int) (*Hasher, error) {
 	if cost < bcrypt.MinCost || cost > bcrypt.MaxCost {
 		return nil, fmt.Errorf("%w: %d (allowed %d..%d)", ErrInvalidCost, cost, bcrypt.MinCost, bcrypt.MaxCost)
@@ -26,6 +33,8 @@ func NewHasher(cost int) (*Hasher, error) {
 	return &Hasher{cost: cost}, nil
 }
 
+// Hash возвращает bcrypt-хэш пароля со случайной солью. Пароль длиннее MaxLength байт отклоняется с
+// ErrTooLong.
 func (h *Hasher) Hash(password string) (string, error) {
 	if len(password) > MaxLength {
 		return "", ErrTooLong
@@ -37,6 +46,7 @@ func (h *Hasher) Hash(password string) (string, error) {
 	return string(hash), nil
 }
 
+// Compare сообщает, соответствует ли password хэшу hash.
 func (h *Hasher) Compare(hash, password string) (bool, error) {
 	if len(password) > MaxLength {
 		return false, nil

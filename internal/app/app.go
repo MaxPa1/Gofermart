@@ -1,3 +1,6 @@
+// Package app — создаёт и связывает зависимости (логгер, пул соединений с
+// PostgreSQL, миграции, сервисы, хендлеры, клиент и воркер accrual), запускает HTTP-сервер и фоновый
+// воркер и обеспечивает их корректное завершение.
 package app
 
 import (
@@ -33,6 +36,9 @@ const (
 	shutdownTimeout   = 10 * time.Second
 )
 
+// Run
+// При старте подключается к PostgreSQL и применяет миграции, затем параллельно запускает HTTP-сервер и
+// воркер опроса accrual.
 func Run(ctx context.Context, cfg config.Config) error {
 	logger, err := newLogger(cfg.LogLevel)
 	if err != nil {

@@ -7,12 +7,17 @@ import (
 	"strings"
 )
 
+// Amount — сумма баллов в сотых долях балла
 type Amount int64
 
 const amountScale = 100
 
+// ErrInvalidAmount возвращается ParseAmount и ParseAmountRounded, если строка не является допустимой
+// суммой.
 var ErrInvalidAmount = errors.New("invalid amount")
 
+// String форматирует сумму десятичным числом без незначащих нулей в дробной части: 500, 500.5, 500.05,
+// -0.01.
 func (a Amount) String() string {
 	n := uint64(a)
 	sign := ""
@@ -35,6 +40,8 @@ func (a Amount) String() string {
 	}
 }
 
+// ParseAmount разбирает десятичную сумму вида [-]ЦИФРЫ[.ЦИФРЫ] не более чем с двумя значащими знаками
+// после точки
 func ParseAmount(s string) (Amount, error) {
 	sign := ""
 	if strings.HasPrefix(s, "-") {
@@ -54,6 +61,7 @@ func ParseAmount(s string) (Amount, error) {
 	return Amount(n), nil
 }
 
+// ParseAmountRounded разбирает десятичное число в любом формате
 func ParseAmountRounded(s string) (Amount, error) {
 	if strings.Contains(s, "/") {
 		return 0, ErrInvalidAmount

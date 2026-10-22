@@ -10,6 +10,7 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/model"
 )
 
+// OrderRepository хранит заказы, загруженные пользователями.
 type OrderRepository struct {
 	pool *pgxpool.Pool
 }
@@ -18,6 +19,8 @@ func NewOrderRepository(pool *pgxpool.Pool) *OrderRepository {
 	return &OrderRepository{pool: pool}
 }
 
+// Create сохраняет заказ number пользователя userID со статусом NEW. Если заказ с таким номером уже
+// есть, он не изменяется. created сообщает, был ли заказ создан этим вызовом
 func (r *OrderRepository) Create(ctx context.Context, userID int64, number string) (ownerID int64, created bool, err error) {
 	const insertQuery = `
 		INSERT INTO orders (number, user_id)
@@ -43,6 +46,7 @@ func (r *OrderRepository) Create(ctx context.Context, userID int64, number strin
 	return ownerID, false, nil
 }
 
+// ListByUser возвращает заказы пользователя userID от новых к старым
 func (r *OrderRepository) ListByUser(ctx context.Context, userID int64) ([]model.Order, error) {
 	const query = `
 		SELECT number, status, (accrual * 100)::bigint, uploaded_at

@@ -1,5 +1,7 @@
+// Package luhn проверяет номера алгоритмом Луна
 package luhn
 
+// Valid сообщает, является ли number непустой строкой ASCII-цифр с корректной контрольной суммой Луна.
 func Valid(number string) bool {
 	if number == "" {
 		return false

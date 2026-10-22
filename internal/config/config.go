@@ -1,3 +1,4 @@
+// Package config загружает конфигурацию сервиса из флагов командной строки и переменных окружения.
 package config
 
 import (
@@ -12,37 +13,60 @@ import (
 
 const defaultRunAddress = "localhost:8080"
 
+// ErrInvalid оборачивает любую ошибку разбора или проверки значений конфигурации; причина указывается
+// в тексте обёртки.
 var ErrInvalid = errors.New("invalid config")
 
+// Config — полная конфигурация сервиса.
 type Config struct {
-	RunAddress     string `env:"RUN_ADDRESS"`
-	DatabaseURI    string `env:"DATABASE_URI"`
+	// RunAddress — адрес и порт HTTP-сервера
+	RunAddress string `env:"RUN_ADDRESS"`
+	// DatabaseURI — строка подключения к PostgreSQL
+	DatabaseURI string `env:"DATABASE_URI"`
+	// AccrualAddress — адрес системы расчёта начислений
 	AccrualAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 
-	JWTSecret    string        `env:"JWT_SECRET"`
-	TokenTTL     time.Duration `env:"TOKEN_TTL" envDefault:"24h"`
-	SecureCookie bool          `env:"SECURE_COOKIE" envDefault:"false"`
-	LogLevel     zapcore.Level `env:"LOG_LEVEL" envDefault:"info"`
+	// JWTSecret — секрет подписи JWT
+	JWTSecret string `env:"JWT_SECRET"`
+	// TokenTTL — время жизни токена аутентификации
+	TokenTTL time.Duration `env:"TOKEN_TTL" envDefault:"24h"`
+	// SecureCookie — выставлять ли флаг Secure у cookie с токеном
+	SecureCookie bool `env:"SECURE_COOKIE" envDefault:"false"`
+	// LogLevel — минимальный уровень логов
+	LogLevel zapcore.Level `env:"LOG_LEVEL" envDefault:"info"`
 
+	// DB — параметры пула соединений с PostgreSQL
 	DB DBConfig `envPrefix:"DB_"`
 
+	// Accrual — параметры фонового опроса системы accrual
 	Accrual AccrualConfig `envPrefix:"ACCRUAL_"`
 }
 
+// AccrualConfig — параметры воркера, опрашивающего систему accrual.
 type AccrualConfig struct {
-	PollInterval   time.Duration `env:"POLL_INTERVAL" envDefault:"1s"`
-	BatchSize      int           `env:"BATCH_SIZE" envDefault:"50"`
-	Workers        int           `env:"WORKERS" envDefault:"4"`
+	// PollInterval — интервал между циклами опроса
+	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"1s"`
+	// BatchSize — сколько заказов берётся на проверку за один цикл
+	BatchSize int `env:"BATCH_SIZE" envDefault:"50"`
+	// Workers — максимум одновременных запросов к accrual
+	Workers int `env:"WORKERS" envDefault:"4"`
+	// RequestTimeout — таймаут одного запроса к accrual (ACCRUAL_REQUEST_TIMEOUT)
 	RequestTimeout time.Duration `env:"REQUEST_TIMEOUT" envDefault:"5s"`
 }
 
+// DBConfig — параметры пула соединений с PostgreSQL
 type DBConfig struct {
-	MaxConns        int32         `env:"MAX_CONNS" envDefault:"10"`
-	MinConns        int32         `env:"MIN_CONNS" envDefault:"2"`
+	// MaxConns — максимальное число открытых соединений
+	MaxConns int32 `env:"MAX_CONNS" envDefault:"10"`
+	// MinConns — сколько соединений пул держит открытыми без нагрузки (DB_MIN_CONNS)
+	MinConns int32 `env:"MIN_CONNS" envDefault:"2"`
+	// MaxConnLifetime — срок, после которого соединение закрывается и создаётся заново
 	MaxConnLifetime time.Duration `env:"MAX_CONN_LIFETIME" envDefault:"1h"`
+	// MaxConnIdleTime — время простоя, после которого соединение закрывается
 	MaxConnIdleTime time.Duration `env:"MAX_CONN_IDLE_TIME" envDefault:"5m"`
 }
 
+// Load разбирает флаги из args
 func Load(args, environ []string) (Config, error) {
 	var cfg Config
 

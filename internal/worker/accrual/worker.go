@@ -1,3 +1,5 @@
+// Package accrual — фоновый воркер, который получает от системы accrual результаты расчёта начислений
+// по незавершённым заказам и сохраняет их.
 package accrual
 
 import (
@@ -14,21 +16,34 @@ import (
 
 //go:generate go tool mockgen -source=worker.go -destination=mocks_test.go -package=accrual -write_package_comment=false
 
+// Client — клиент системы accrual, который использует Worker.
 type Client interface {
+	// GetOrder возвращает результат расчёта по заказу number. Ошибка client.ErrOrderNotRegistered
+	// означает, что заказ ещё не зарегистрирован, *client.RateLimitError — что превышен лимит запросов.
 	GetOrder(ctx context.Context, number string) (client.Result, error)
 }
 
+// Repository — хранилище заказов, которое использует Worker.
 type Repository interface {
+	// TakeOrdersToCheck возвращает до limit незавершённых заказов для проверки.
 	TakeOrdersToCheck(ctx context.Context, limit int) ([]model.Order, error)
+	// ApplyAccrual сохраняет статус и начисление заказа и зачисляет баллы на баланс; applied равно false,
+	// если заказ уже в окончательном статусе.
 	ApplyAccrual(ctx context.Context, number string, status model.OrderStatus, accrual model.Amount) (applied bool, err error)
 }
 
+// Config — параметры работы Worker. Все значения должны быть положительными.
 type Config struct {
+	// PollInterval — интервал между циклами опроса.
 	PollInterval time.Duration
-	BatchSize    int
-	Workers      int
+	// BatchSize — максимум заказов, проверяемых за один цикл.
+	BatchSize int
+	// Workers — максимум одновременных запросов к accrual.
+	Workers int
 }
 
+// Worker периодически опрашивает систему accrual по незавершённым заказам и сохраняет результаты.
+// Создаётся через New.
 type Worker struct {
 	client Client
 	repo   Repository
@@ -47,6 +62,7 @@ func New(accrualClient Client, repo Repository, cfg Config, logger *zap.Logger) 
 	}
 }
 
+// Run выполняет циклы опроса до отмены ctx: первый — сразу, следующие — с интервалом cfg.PollInterval.
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("accrual worker started",
 		zap.Duration("poll_interval", w.cfg.PollInterval),

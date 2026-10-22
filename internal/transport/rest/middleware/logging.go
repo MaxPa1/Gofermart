@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// Logger возвращает middleware, которое пишет в logger одну запись уровня Info на каждый запрос:
+// request ID, метод, путь, код и размер ответа, длительность обработки.
 func Logger(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +38,8 @@ func Logger(logger *zap.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// Recoverer возвращает middleware, которое перехватывает панику в обработчике, пишет её вместе со
+// стеком вызовов в logger на уровне Error и отвечает 500 Internal Server Error.
 func Recoverer(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

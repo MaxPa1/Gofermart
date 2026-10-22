@@ -13,6 +13,7 @@ import (
 
 const usersLoginKey = "users_login_key"
 
+// UserRepository хранит учётные записи пользователей.
 type UserRepository struct {
 	pool *pgxpool.Pool
 }
@@ -21,6 +22,8 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	return &UserRepository{pool: pool}
 }
 
+// Create сохраняет пользователя с логином login и хэшем пароля passwordHash и возвращает его с
+// присвоенными ID и CreatedAt. Возвращает model.ErrLoginTaken, если логин уже занят.
 func (r *UserRepository) Create(ctx context.Context, login, passwordHash string) (model.User, error) {
 	const query = `
 		INSERT INTO users (login, password_hash)
@@ -38,6 +41,7 @@ func (r *UserRepository) Create(ctx context.Context, login, passwordHash string)
 	return user, nil
 }
 
+// GetByLogin возвращает пользователя с логином login или model.ErrUserNotFound, если такого нет.
 func (r *UserRepository) GetByLogin(ctx context.Context, login string) (model.User, error) {
 	const query = `
 		SELECT id, login, password_hash, created_at

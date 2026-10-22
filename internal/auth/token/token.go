@@ -1,3 +1,4 @@
+// Package token выпускает и проверяет JWT, которыми аутентифицируются пользователи.
 package token
 
 import (
@@ -9,26 +10,33 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// MinSecretLength — минимальная длина секрета HMAC в байтах: 256 бит
 const MinSecretLength = 32
 
 const issuer = "gophermart"
 
 var (
+	// ErrInvalidToken возвращается Manager.Parse для любого непригодного токена.
 	ErrInvalidToken = errors.New("invalid token")
 
+	// ErrShortSecret возвращается NewManager, если секрет короче MinSecretLength байт.
 	ErrShortSecret = errors.New("jwt secret is too short")
 
+	// ErrInvalidTTL возвращается NewManager, если время жизни токена не положительное.
 	ErrInvalidTTL = errors.New("token ttl must be positive")
 
+	// ErrInvalidUserID возвращается Manager.Generate, если идентификатор пользователя не положительный.
 	ErrInvalidUserID = errors.New("user id must be positive")
 )
 
+// Manager выпускает и проверяет JWT с общим секретом и временем жизни.
 type Manager struct {
 	secret []byte
 	ttl    time.Duration
 	parser *jwt.Parser
 }
 
+// NewManager создаёт Manager с секретом подписи secret и временем жизни токенов ttl.
 func NewManager(secret []byte, ttl time.Duration) (*Manager, error) {
 	if len(secret) < MinSecretLength {
 		return nil, fmt.Errorf("%w: got %d bytes, need at least %d", ErrShortSecret, len(secret), MinSecretLength)
@@ -54,6 +62,8 @@ func NewManager(secret []byte, ttl time.Duration) (*Manager, error) {
 	}, nil
 }
 
+// Generate выпускает подписанный токен для пользователя userID, действительный в течение ttl с
+// текущего момента.
 func (m *Manager) Generate(userID int64) (string, error) {
 	if userID <= 0 {
 		return "", fmt.Errorf("%w: %d", ErrInvalidUserID, userID)
@@ -75,6 +85,8 @@ func (m *Manager) Generate(userID int64) (string, error) {
 	return signed, nil
 }
 
+// Parse проверяет подпись и claims токена и возвращает идентификатор пользователя из subject. Любая
+// проблема с токеном возвращается ошибкой, обёртывающей ErrInvalidToken.
 func (m *Manager) Parse(token string) (int64, error) {
 	var claims jwt.RegisteredClaims
 

@@ -1,3 +1,4 @@
+// Package accrual — HTTP-клиент внешней системы расчёта начислений баллов (accrual).
 package accrual
 
 import (
@@ -15,15 +16,20 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/model"
 )
 
+// Status — статус расчёта начисления в терминах системы accrual.
 type Status string
 
 const (
+	// StatusRegistered — заказ зарегистрирован, но начисление ещё не рассчитано.
 	StatusRegistered Status = "REGISTERED"
 
+	// StatusInvalid — заказ не принят к расчёту, начисления не будет.
 	StatusInvalid Status = "INVALID"
 
+	// StatusProcessing — начисление рассчитывается.
 	StatusProcessing Status = "PROCESSING"
 
+	// StatusProcessed — расчёт окончен, начисление известно.
 	StatusProcessed Status = "PROCESSED"
 )
 
@@ -33,23 +39,34 @@ const (
 	maxResponseSize = 64 << 10
 )
 
+// ErrOrderNotRegistered возвращается Client.GetOrder, если accrual ответил 204 No Content: заказ в
+// системе расчёта не зарегистрирован.
 var ErrOrderNotRegistered = errors.New("order is not registered in accrual system")
 
+// RateLimitError возвращается Client.GetOrder, если accrual ответил 429 Too Many Requests. Все запросы
+// к accrual следует приостановить на RetryAfter.
 type RateLimitError struct {
+	// RetryAfter — сколько ждать до следующего запроса. Если заголовок отсутствует или некорректен — 60 секунд.
 	RetryAfter time.Duration
 }
 
+// Error возвращает описание ошибки с длительностью паузы.
 func (e *RateLimitError) Error() string {
 	return fmt.Sprintf("accrual rate limit exceeded, retry after %s", e.RetryAfter)
 }
 
+// Result — результат расчёта начисления по заказу.
 type Result struct {
-	Order  string
+	// Order — номер заказа.
+	Order string
+	// Status — статус расчёта.
 	Status Status
 
+	// Accrual — начисленные баллы; ненулевое значение бывает только в статусе StatusProcessed.
 	Accrual model.Amount
 }
 
+// Client — клиент HTTP API системы accrual.
 type Client struct {
 	baseURL *url.URL
 	http    *http.Client
@@ -57,6 +74,7 @@ type Client struct {
 	now func() time.Time
 }
 
+// New создаёт клиент accrual по адресу address с ограничением timeout на весь запрос
 func New(address string, timeout time.Duration) (*Client, error) {
 	if !strings.Contains(address, "://") {
 		address = "http://" + address
@@ -83,6 +101,9 @@ type orderResponse struct {
 	Accrual json.Number `json:"accrual"`
 }
 
+// GetOrder запрашивает у accrual результат расчёта начисления по заказу number. Возвращает Result при
+// ответе 200, ErrOrderNotRegistered при 204, *RateLimitError при 429 и ошибку при любом другом коде
+// ответа, сетевом сбое, отмене ctx или некорректном теле ответа.
 func (c *Client) GetOrder(ctx context.Context, number string) (Result, error) {
 	endpoint := c.baseURL.JoinPath("api", "orders", number)
 

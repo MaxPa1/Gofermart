@@ -10,6 +10,8 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/model"
 )
 
+// AccrualRepository хранит результаты расчёта начислений, которые фоновый воркер получает от системы
+// accrual.
 type AccrualRepository struct {
 	pool *pgxpool.Pool
 }
@@ -18,6 +20,8 @@ func NewAccrualRepository(pool *pgxpool.Pool) *AccrualRepository {
 	return &AccrualRepository{pool: pool}
 }
 
+// TakeOrdersToCheck выбирает до limit незавершённых заказов (NEW, PROCESSING) для опроса accrual и
+// отмечает у них время проверки.
 func (r *AccrualRepository) TakeOrdersToCheck(ctx context.Context, limit int) ([]model.Order, error) {
 	const query = `
 		UPDATE orders
@@ -56,6 +60,9 @@ func (r *AccrualRepository) TakeOrdersToCheck(ctx context.Context, limit int) ([
 	return orders, nil
 }
 
+// ApplyAccrual одним оператором записывает заказу number статус status и начисление accrual и, если
+// начисление положительное, прибавляет его к балансу владельца заказа. Обновляются только
+// незавершённые заказы (NEW, PROCESSING)
 func (r *AccrualRepository) ApplyAccrual(
 	ctx context.Context,
 	number string,

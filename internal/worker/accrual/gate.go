@@ -16,6 +16,7 @@ func newGate() *gate {
 	return &gate{now: time.Now}
 }
 
+// Pause приостанавливает все вызовы Wait на d от текущего момента.
 func (g *gate) Pause(d time.Duration) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -24,6 +25,7 @@ func (g *gate) Pause(d time.Duration) {
 	}
 }
 
+// Wait блокируется до окончания паузы или отмены ctx; во втором случае возвращает ctx.Err().
 func (g *gate) Wait(ctx context.Context) error {
 	for {
 		g.mu.Lock()

@@ -11,6 +11,7 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/model"
 )
 
+// BalanceRepository хранит балансы пользователей и историю списаний.
 type BalanceRepository struct {
 	pool *pgxpool.Pool
 }
@@ -19,6 +20,7 @@ func NewBalanceRepository(pool *pgxpool.Pool) *BalanceRepository {
 	return &BalanceRepository{pool: pool}
 }
 
+// Get возвращает баланс пользователя userID.
 func (r *BalanceRepository) Get(ctx context.Context, userID int64) (model.Balance, error) {
 	const query = `
 		SELECT (current * 100)::bigint, (withdrawn * 100)::bigint
@@ -36,6 +38,8 @@ func (r *BalanceRepository) Get(ctx context.Context, userID int64) (model.Balanc
 	return model.Balance{Current: model.Amount(current), Withdrawn: model.Amount(withdrawn)}, nil
 }
 
+// Withdraw списывает sum с баланса пользователя userID в счёт оплаты заказа orderNumber и записывает
+// списание в историю.
 func (r *BalanceRepository) Withdraw(ctx context.Context, userID int64, orderNumber string, sum model.Amount) error {
 	const query = `
 		WITH debited AS (
@@ -59,6 +63,7 @@ func (r *BalanceRepository) Withdraw(ctx context.Context, userID int64, orderNum
 	return nil
 }
 
+// ListWithdrawals возвращает списания пользователя userID от новых к старым
 func (r *BalanceRepository) ListWithdrawals(ctx context.Context, userID int64) ([]model.Withdrawal, error) {
 	const query = `
 		SELECT order_number, (sum * 100)::bigint, processed_at

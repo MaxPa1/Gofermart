@@ -18,8 +18,11 @@ import (
 
 const maxOrderBodySize = 1 << 10
 
+// OrdersService — бизнес-логика заказов, которую использует OrdersHandler.
 type OrdersService interface {
+	// Upload загружает номер заказа пользователя для расчёта начисления.
 	Upload(ctx context.Context, userID int64, number string) error
+	// List возвращает заказы пользователя от новых к старым.
 	List(ctx context.Context, userID int64) ([]model.Order, error)
 }
 
@@ -30,6 +33,7 @@ type orderResponse struct {
 	UploadedAt string     `json:"uploaded_at"`
 }
 
+// OrdersHandler обрабатывает загрузку заказов и получение их списка.
 type OrdersHandler struct {
 	orders OrdersService
 	logger *zap.Logger
@@ -39,6 +43,14 @@ func NewOrdersHandler(orders OrdersService, logger *zap.Logger) *OrdersHandler {
 	return &OrdersHandler{orders: orders, logger: logger}
 }
 
+// Upload обрабатывает POST /api/user/orders. Тело запроса — номер заказа; Ответы:
+//   - 202 — новый заказ принят в обработку;
+//   - 200 — заказ уже загружен этим пользователем;
+//   - 400 — неверный формат запроса;
+//   - 409 — заказ уже загружен другим пользователем;
+//   - 413 — тело запроса больше 1 КБ;
+//   - 422 — номер заказа не проходит проверку алгоритмом Луна;
+//   - 500 — внутренняя ошибка сервера.
 func (h *OrdersHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromRequest(w, r, h.logger, "upload order")
 	if !ok {
@@ -81,6 +93,12 @@ func (h *OrdersHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// List обрабатывает GET /api/user/orders и возвращает заказы пользователя от новых к старым:
+// [{"number": "9278923470", "status": "PROCESSED", "accrual": 500, "uploaded_at":
+// "2020-12-10T15:15:45+03:00"}]. Ответы:
+//   - 200 — список заказов в теле ответа;
+//   - 204 — заказов нет;
+//   - 500 — внутренняя ошибка сервера.
 func (h *OrdersHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromRequest(w, r, h.logger, "list orders")
 	if !ok {
