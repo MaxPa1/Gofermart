@@ -2,6 +2,7 @@ package model
 
 import (
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,6 +121,39 @@ func TestParseAmountRounded(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func BenchmarkAmount_String(b *testing.B) {
+	for _, a := range []Amount{0, 50000, 50050, 50005, 72998, -150, math.MaxInt64} {
+		b.Run(strconv.FormatInt(int64(a), 10), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = a.String()
+			}
+		})
+	}
+}
+
+func BenchmarkParseAmount(b *testing.B) {
+	for _, in := range []string{"751", "500.5", "729.98", "-1.5", "92233720368547758.07", "1.234"} {
+		b.Run(in, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_, _ = ParseAmount(in)
+			}
+		})
+	}
+}
+
+func BenchmarkParseAmountRounded(b *testing.B) {
+	for _, in := range []string{"500", "729.98", "9.25875", "7.51e2", "abc"} {
+		b.Run(in, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_, _ = ParseAmountRounded(in)
+			}
 		})
 	}
 }

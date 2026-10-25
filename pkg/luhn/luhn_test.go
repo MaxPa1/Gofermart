@@ -38,3 +38,25 @@ func TestValid(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkValid(b *testing.B) {
+	benchmarks := []struct {
+		name   string
+		number string
+	}{
+		{name: "order number", number: "12345678903"},
+		{name: "card number", number: "4561261212345467"},
+		{name: "wrong check digit", number: "12345678900"},
+		{name: "letter at the end", number: "1234567890a"},
+		{name: "1000 digits", number: strings.Repeat("0", 998) + "18"},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				Valid(bm.number)
+			}
+		})
+	}
+}
