@@ -1,5 +1,5 @@
-// Package middleware содержит HTTP-middleware сервиса: аутентификацию по cookie с JWT, распаковку
-// gzip-запросов, журналирование запросов и перехват паник.
+// Package middleware содержит HTTP-middleware сервиса: аутентификацию по cookie с JWT, идентификатор
+// запроса, распаковку gzip-запросов и сжатие ответов, журналирование запросов и перехват паник.
 package middleware
 
 import (

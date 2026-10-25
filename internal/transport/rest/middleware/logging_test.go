@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -42,7 +41,7 @@ func TestLogger(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger, logs := newObservedLogger()
-			h := chimw.RequestID(Logger(logger)(tt.handler))
+			h := RequestID(Logger(logger)(tt.handler))
 
 			req := httptest.NewRequest(http.MethodPost, "/api/user/login", nil)
 			h.ServeHTTP(httptest.NewRecorder(), req)

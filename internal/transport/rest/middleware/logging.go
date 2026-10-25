@@ -6,7 +6,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	chimw "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
@@ -17,25 +16,51 @@ func Logger(logger *zap.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			ww := chimw.NewWrapResponseWriter(w, r.ProtoMajor)
+			rec := &responseRecorder{ResponseWriter: w}
 
-			next.ServeHTTP(ww, r)
+			next.ServeHTTP(rec, r)
 
-			status := ww.Status()
+			status := rec.status
 			if status == 0 {
 				status = http.StatusOK
 			}
 
 			logger.Info("http request",
-				zap.String("request_id", chimw.GetReqID(r.Context())),
+				zap.String("request_id", RequestIDFromContext(r.Context())),
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
 				zap.Int("status", status),
-				zap.Int("size", ww.BytesWritten()),
+				zap.Int("size", rec.size),
 				zap.Duration("duration", time.Since(start)),
 			)
 		})
 	}
+}
+
+type responseRecorder struct {
+	http.ResponseWriter
+	status int
+	size   int
+}
+
+func (r *responseRecorder) WriteHeader(code int) {
+	if r.status == 0 && code >= http.StatusOK {
+		r.status = code
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseRecorder) Write(p []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	n, err := r.ResponseWriter.Write(p)
+	r.size += n
+	return n, err
+}
+
+func (r *responseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }
 
 // Recoverer возвращает middleware, которое перехватывает панику в обработчике, пишет её вместе со
@@ -54,7 +79,7 @@ func Recoverer(logger *zap.Logger) func(http.Handler) http.Handler {
 				}
 
 				logger.Error("panic recovered",
-					zap.String("request_id", chimw.GetReqID(r.Context())),
+					zap.String("request_id", RequestIDFromContext(r.Context())),
 					zap.String("method", r.Method),
 					zap.String("path", r.URL.Path),
 					zap.Any("panic", rec),

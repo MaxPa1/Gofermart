@@ -87,3 +87,80 @@ func TestDecompress_LimitAppliesToDecompressedSize(t *testing.T) {
 	var maxBytesErr *http.MaxBytesError
 	assert.ErrorAs(t, readErr, &maxBytesErr)
 }
+
+func TestCompress(t *testing.T) {
+	const body = `{"message":"hello, gopher"}`
+
+	tests := []struct {
+		name           string
+		method         string
+		acceptEncoding string
+		contentType    string
+		status         int
+		body           string
+		wantGzip       bool
+	}{
+		{name: "json", method: http.MethodGet, acceptEncoding: "gzip", contentType: "application/json", status: http.StatusOK, body: body, wantGzip: true},
+		{name: "plain text error", method: http.MethodPost, acceptEncoding: "gzip, deflate, br", contentType: "text/plain; charset=utf-8", status: http.StatusBadRequest, body: "bad request", wantGzip: true},
+		{name: "sniffed content type", method: http.MethodGet, acceptEncoding: "gzip", status: http.StatusOK, body: "plain words", wantGzip: true},
+		{name: "gzip with quality", method: http.MethodGet, acceptEncoding: "br;q=1.0, gzip;q=0.5", contentType: "application/json", status: http.StatusOK, body: body, wantGzip: true},
+		{name: "legacy x-gzip", method: http.MethodGet, acceptEncoding: "x-gzip", contentType: "application/json", status: http.StatusOK, body: body, wantGzip: true},
+		{name: "gzip forbidden by negative q", method: http.MethodGet, acceptEncoding: "gzip;q=-1", contentType: "application/json", status: http.StatusOK, body: body},
+		{name: "no accept encoding", method: http.MethodGet, contentType: "application/json", status: http.StatusOK, body: body},
+		{name: "gzip forbidden by q=0", method: http.MethodGet, acceptEncoding: "gzip;q=0", contentType: "application/json", status: http.StatusOK, body: body},
+		{name: "other encoding only", method: http.MethodGet, acceptEncoding: "br", contentType: "application/json", status: http.StatusOK, body: body},
+		{name: "binary content", method: http.MethodGet, acceptEncoding: "gzip", contentType: "image/png", status: http.StatusOK, body: "png bytes"},
+		{name: "no content", method: http.MethodGet, acceptEncoding: "gzip", status: http.StatusNoContent},
+		{name: "head", method: http.MethodHead, acceptEncoding: "gzip", contentType: "application/json", status: http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.contentType != "" {
+					w.Header().Set("Content-Type", tt.contentType)
+				}
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			})
+
+			req := httptest.NewRequest(tt.method, "/", nil)
+			if tt.acceptEncoding != "" {
+				req.Header.Set("Accept-Encoding", tt.acceptEncoding)
+			}
+			rec := httptest.NewRecorder()
+			Compress(next).ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.status, rec.Code)
+			assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"))
+
+			got := rec.Body.String()
+			if tt.wantGzip {
+				require.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
+				assert.NotEqual(t, "application/x-gzip", rec.Header().Get("Content-Type"), "content type must describe the uncompressed body")
+				zr, err := gzip.NewReader(rec.Body)
+				require.NoError(t, err)
+				b, err := io.ReadAll(zr)
+				require.NoError(t, err)
+				got = string(b)
+			} else {
+				assert.Empty(t, rec.Header().Get("Content-Encoding"))
+			}
+			assert.Equal(t, tt.body, got)
+		})
+	}
+}
+
+func TestCompress_StatusWithoutBody(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	Compress(next).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+	assert.Empty(t, rec.Header().Get("Content-Encoding"))
+	assert.Empty(t, rec.Body.Bytes())
+}

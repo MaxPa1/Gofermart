@@ -75,6 +75,7 @@ func TestRouter_Routes(t *testing.T) {
 		{name: "register", method: http.MethodPost, path: "/api/user/register", body: `{"login":"a","password":"b"}`, wantStatus: http.StatusOK},
 		{name: "login", method: http.MethodPost, path: "/api/user/login", body: `{"login":"a","password":"b"}`, wantStatus: http.StatusOK},
 		{name: "wrong method", method: http.MethodGet, path: "/api/user/register", wantStatus: http.StatusMethodNotAllowed},
+		{name: "wrong method on protected route", method: http.MethodDelete, path: "/api/user/orders", wantStatus: http.StatusMethodNotAllowed},
 		{name: "unknown path", method: http.MethodPost, path: "/api/user/unknown", wantStatus: http.StatusNotFound},
 	}
 	for _, tt := range tests {
@@ -92,6 +93,15 @@ func TestRouter_Routes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRouter_MethodNotAllowedListsAllowedMethods(t *testing.T) {
+	req := httptest.NewRequest(http.MethodDelete, "/api/user/orders", nil)
+	rec := httptest.NewRecorder()
+	newTestRouter().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+	assert.ElementsMatch(t, []string{"GET", "HEAD", "POST"}, strings.Split(rec.Header().Get("Allow"), ", "))
 }
 
 func TestRouter_GzipRequest(t *testing.T) {
