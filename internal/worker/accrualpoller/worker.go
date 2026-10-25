@@ -1,6 +1,6 @@
-// Package accrual — фоновый воркер, который получает от системы accrual результаты расчёта начислений
+// Package accrualpoller — фоновый воркер, который получает от системы accrual результаты расчёта начислений
 // по незавершённым заказам и сохраняет их.
-package accrual
+package accrualpoller
 
 import (
 	"context"
@@ -10,17 +10,17 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	client "github.com/MaxPa1/Gofermart/internal/client/accrual"
+	"github.com/MaxPa1/Gofermart/internal/client/accrual"
 	"github.com/MaxPa1/Gofermart/internal/model"
 )
 
-//go:generate go tool mockgen -source=worker.go -destination=mocks_test.go -package=accrual -write_package_comment=false
+//go:generate go tool mockgen -source=worker.go -destination=mocks_test.go -package=accrualpoller -write_package_comment=false
 
 // Client — клиент системы accrual, который использует Worker.
 type Client interface {
-	// GetOrder возвращает результат расчёта по заказу number. Ошибка client.ErrOrderNotRegistered
-	// означает, что заказ ещё не зарегистрирован, *client.RateLimitError — что превышен лимит запросов.
-	GetOrder(ctx context.Context, number string) (client.Result, error)
+	// GetOrder возвращает результат расчёта по заказу number. Ошибка accrual.ErrOrderNotRegistered
+	// означает, что заказ ещё не зарегистрирован, *accrual.RateLimitError — что превышен лимит запросов.
+	GetOrder(ctx context.Context, number string) (accrual.Result, error)
 }
 
 // Repository — хранилище заказов, которое использует Worker.
@@ -29,7 +29,7 @@ type Repository interface {
 	TakeOrdersToCheck(ctx context.Context, limit int) ([]model.Order, error)
 	// ApplyAccrual сохраняет статус и начисление заказа и зачисляет баллы на баланс; applied равно false,
 	// если заказ уже в окончательном статусе.
-	ApplyAccrual(ctx context.Context, number string, status model.OrderStatus, accrual model.Amount) (applied bool, err error)
+	ApplyAccrual(ctx context.Context, number string, status model.OrderStatus, amount model.Amount) (applied bool, err error)
 }
 
 // Config — параметры работы Worker. Все значения должны быть положительными.
@@ -58,7 +58,7 @@ func New(accrualClient Client, repo Repository, cfg Config, logger *zap.Logger) 
 		repo:   repo,
 		cfg:    cfg,
 		logger: logger,
-		gate:   newGate(),
+		gate:   new(gate),
 	}
 }
 
@@ -123,13 +123,13 @@ func (w *Worker) process(ctx context.Context, o model.Order) {
 	log := w.logger.With(zap.String("order", o.Number))
 
 	res, err := w.client.GetOrder(ctx, o.Number)
-	var rateLimit *client.RateLimitError
+	var rateLimit *accrual.RateLimitError
 	switch {
 	case errors.As(err, &rateLimit):
 		w.gate.Pause(rateLimit.RetryAfter)
 		log.Warn("accrual rate limit exceeded, pausing requests", zap.Duration("retry_after", rateLimit.RetryAfter))
 		return
-	case errors.Is(err, client.ErrOrderNotRegistered):
+	case errors.Is(err, accrual.ErrOrderNotRegistered):
 		log.Debug("order is not registered in accrual yet")
 		return
 	case err != nil:
@@ -139,16 +139,16 @@ func (w *Worker) process(ctx context.Context, o model.Order) {
 		return
 	}
 
-	status, accrual, ok := nextState(res)
+	status, amount, ok := nextState(res)
 	if !ok {
 		log.Error("unknown accrual status", zap.String("status", string(res.Status)))
 		return
 	}
-	if status == o.Status && accrual == o.Accrual {
+	if status == o.Status && amount == o.Accrual {
 		return
 	}
 
-	applied, err := w.repo.ApplyAccrual(ctx, o.Number, status, accrual)
+	applied, err := w.repo.ApplyAccrual(ctx, o.Number, status, amount)
 	if err != nil {
 		if ctx.Err() == nil {
 			log.Error("apply accrual", zap.Error(err))
@@ -161,17 +161,17 @@ func (w *Worker) process(ctx context.Context, o model.Order) {
 	}
 	log.Info("order accrual updated",
 		zap.String("status", string(status)),
-		zap.Stringer("accrual", accrual),
+		zap.Stringer("accrual", amount),
 	)
 }
 
-func nextState(res client.Result) (model.OrderStatus, model.Amount, bool) {
+func nextState(res accrual.Result) (model.OrderStatus, model.Amount, bool) {
 	switch res.Status {
-	case client.StatusRegistered, client.StatusProcessing:
+	case accrual.StatusRegistered, accrual.StatusProcessing:
 		return model.OrderStatusProcessing, 0, true
-	case client.StatusInvalid:
+	case accrual.StatusInvalid:
 		return model.OrderStatusInvalid, 0, true
-	case client.StatusProcessed:
+	case accrual.StatusProcessed:
 		return model.OrderStatusProcessed, res.Accrual, true
 	default:
 		return "", 0, false

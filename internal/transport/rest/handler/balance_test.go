@@ -110,7 +110,7 @@ func TestBalanceHandler_Withdraw_BadRequest(t *testing.T) {
 		{name: "too many decimals", body: `{"order": "2377225624", "sum": 1.234}`, wantStatus: http.StatusBadRequest},
 		{name: "exponent", body: `{"order": "2377225624", "sum": 7.51e2}`, wantStatus: http.StatusBadRequest},
 		{name: "order as number", body: `{"order": 2377225624, "sum": 751}`, wantStatus: http.StatusBadRequest},
-		{name: "body too large", body: `{"order": "` + strings.Repeat("1", maxWithdrawBodySize) + `", "sum": 1}`, wantStatus: http.StatusRequestEntityTooLarge},
+		{name: "body too large", body: `{"order": "` + strings.Repeat("1", maxJSONBodySize) + `", "sum": 1}`, wantStatus: http.StatusRequestEntityTooLarge},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

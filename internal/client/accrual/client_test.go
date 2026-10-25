@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -134,36 +135,38 @@ func TestClient_GetOrder_NotRegistered(t *testing.T) {
 }
 
 func TestClient_GetOrder_RateLimit(t *testing.T) {
-	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("No more than 10 requests per minute allowed"))
+	})
 
+	_, err := c.GetOrder(context.Background(), testOrder)
+	var rl *RateLimitError
+	require.ErrorAs(t, err, &rl)
+	assert.Equal(t, 60*time.Second, rl.RetryAfter)
+}
+
+func TestRetryAfter(t *testing.T) {
 	tests := []struct {
-		name       string
-		retryAfter string
-		want       time.Duration
+		name   string
+		header func(now time.Time) string
+		want   time.Duration
 	}{
-		{name: "seconds", retryAfter: "60", want: 60 * time.Second},
-		{name: "zero seconds", retryAfter: "0", want: 0},
-		{name: "http date", retryAfter: now.Add(90 * time.Second).Format(http.TimeFormat), want: 90 * time.Second},
-		{name: "date in the past", retryAfter: now.Add(-time.Minute).Format(http.TimeFormat), want: 0},
-		{name: "missing header", retryAfter: "", want: defaultRetryAfter},
-		{name: "garbage", retryAfter: "soon", want: defaultRetryAfter},
-		{name: "negative seconds", retryAfter: "-5", want: defaultRetryAfter},
+		{name: "seconds", header: func(time.Time) string { return "60" }, want: 60 * time.Second},
+		{name: "zero seconds", header: func(time.Time) string { return "0" }, want: 0},
+		{name: "spaces around seconds", header: func(time.Time) string { return " 5 " }, want: 5 * time.Second},
+		{name: "http date", header: func(now time.Time) string { return now.Add(90 * time.Second).Format(http.TimeFormat) }, want: 90 * time.Second},
+		{name: "date in the past", header: func(now time.Time) string { return now.Add(-time.Minute).Format(http.TimeFormat) }, want: 0},
+		{name: "missing header", header: func(time.Time) string { return "" }, want: defaultRetryAfter},
+		{name: "garbage", header: func(time.Time) string { return "soon" }, want: defaultRetryAfter},
+		{name: "negative seconds", header: func(time.Time) string { return "-5" }, want: defaultRetryAfter},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-				if tt.retryAfter != "" {
-					w.Header().Set("Retry-After", tt.retryAfter)
-				}
-				w.WriteHeader(http.StatusTooManyRequests)
-				_, _ = w.Write([]byte("No more than 10 requests per minute allowed"))
+			synctest.Test(t, func(t *testing.T) {
+				assert.Equal(t, tt.want, retryAfter(tt.header(time.Now().UTC())))
 			})
-			c.now = func() time.Time { return now }
-
-			_, err := c.GetOrder(context.Background(), testOrder)
-			var rl *RateLimitError
-			require.ErrorAs(t, err, &rl)
-			assert.Equal(t, tt.want, rl.RetryAfter)
 		})
 	}
 }

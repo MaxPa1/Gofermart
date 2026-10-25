@@ -70,8 +70,6 @@ type Result struct {
 type Client struct {
 	baseURL *url.URL
 	http    *http.Client
-
-	now func() time.Time
 }
 
 // New создаёт клиент accrual по адресу address с ограничением timeout на весь запрос
@@ -91,7 +89,6 @@ func New(address string, timeout time.Duration) (*Client, error) {
 		baseURL: u,
 
 		http: &http.Client{Timeout: timeout},
-		now:  time.Now,
 	}, nil
 }
 
@@ -127,7 +124,7 @@ func (c *Client) GetOrder(ctx context.Context, number string) (Result, error) {
 	case http.StatusNoContent:
 		return Result{}, ErrOrderNotRegistered
 	case http.StatusTooManyRequests:
-		return Result{}, &RateLimitError{RetryAfter: c.retryAfter(resp.Header.Get("Retry-After"))}
+		return Result{}, &RateLimitError{RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	default:
 		return Result{}, fmt.Errorf("unexpected accrual response status %d", resp.StatusCode)
 	}
@@ -163,13 +160,13 @@ func decodeOrder(body io.Reader, number string) (Result, error) {
 	return res, nil
 }
 
-func (c *Client) retryAfter(header string) time.Duration {
+func retryAfter(header string) time.Duration {
 	header = strings.TrimSpace(header)
 	if secs, err := strconv.Atoi(header); err == nil && secs >= 0 {
 		return time.Duration(secs) * time.Second
 	}
 	if t, err := http.ParseTime(header); err == nil {
-		if d := t.Sub(c.now()); d > 0 {
+		if d := time.Until(t); d > 0 {
 			return d
 		}
 

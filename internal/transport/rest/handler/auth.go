@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -13,8 +12,6 @@ import (
 )
 
 //go:generate go tool mockgen -source=auth.go -destination=mocks_test.go -package=handler -write_package_comment=false
-
-const maxCredentialsBodySize = 4 << 10 // 4 КБ
 
 // AuthService — бизнес-логика регистрации и входа, которую использует AuthHandler.
 type AuthService interface {
@@ -48,7 +45,7 @@ func NewAuthHandler(auth AuthService, logger *zap.Logger, secureCookie bool) *Au
 //   - 413 — тело запроса больше 4 КБ;
 //   - 500 — внутренняя ошибка сервера.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	req, ok := h.decodeCredentials(w, r)
+	req, ok := decodeJSON[credentialsRequest](w, r)
 	if !ok {
 		return
 	}
@@ -76,7 +73,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 //   - 413 — тело запроса больше 4 КБ;
 //   - 500 — внутренняя ошибка сервера.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	req, ok := h.decodeCredentials(w, r)
+	req, ok := decodeJSON[credentialsRequest](w, r)
 	if !ok {
 		return
 	}
@@ -95,26 +92,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.writeToken(w, token)
-}
-
-func (h *AuthHandler) decodeCredentials(w http.ResponseWriter, r *http.Request) (credentialsRequest, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxCredentialsBodySize)
-
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-
-	var req credentialsRequest
-	if err := dec.Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			writeError(w, http.StatusRequestEntityTooLarge, "")
-			return credentialsRequest{}, false
-		}
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return credentialsRequest{}, false
-	}
-
-	return req, true
 }
 
 func (h *AuthHandler) writeToken(w http.ResponseWriter, token string) {

@@ -2,9 +2,7 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
@@ -14,8 +12,6 @@ import (
 )
 
 //go:generate go tool mockgen -source=balance.go -destination=mocks_balance_test.go -package=handler -write_package_comment=false
-
-const maxWithdrawBodySize = 4 << 10
 
 // BalanceService — бизнес-логика баланса, которую использует BalanceHandler.
 type BalanceService interface {
@@ -89,7 +85,7 @@ func (h *BalanceHandler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, ok := decodeWithdrawRequest(w, r)
+	req, ok := decodeJSON[withdrawRequest](w, r)
 	if !ok {
 		return
 	}
@@ -140,31 +136,4 @@ func (h *BalanceHandler) Withdrawals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, r, h.logger, "list withdrawals", http.StatusOK, resp)
-}
-
-func decodeWithdrawRequest(w http.ResponseWriter, r *http.Request) (withdrawRequest, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxWithdrawBodySize)
-
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-
-	var req withdrawRequest
-	err := dec.Decode(&req)
-	if err == nil && !errors.Is(dec.Decode(&struct{}{}), io.EOF) {
-		err = errors.New("unexpected data after JSON object")
-	}
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		switch {
-		case errors.As(err, &maxBytesErr):
-			writeError(w, http.StatusRequestEntityTooLarge, "")
-		case errors.Is(err, model.ErrInvalidAmount):
-			writeError(w, http.StatusBadRequest, "sum must be a number with at most two decimal places")
-		default:
-			writeError(w, http.StatusBadRequest, "invalid JSON body")
-		}
-		return withdrawRequest{}, false
-	}
-
-	return req, true
 }

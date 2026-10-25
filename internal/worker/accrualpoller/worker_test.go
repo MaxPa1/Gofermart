@@ -1,4 +1,4 @@
-package accrual
+package accrualpoller
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	client "github.com/MaxPa1/Gofermart/internal/client/accrual"
+	"github.com/MaxPa1/Gofermart/internal/client/accrual"
 	"github.com/MaxPa1/Gofermart/internal/model"
 )
 
@@ -36,7 +36,7 @@ func TestWorker_Process(t *testing.T) {
 	tests := []struct {
 		name    string
 		order   model.Order
-		result  client.Result
+		result  accrual.Result
 		err     error
 		wantApp bool
 
@@ -46,54 +46,54 @@ func TestWorker_Process(t *testing.T) {
 		{
 			name:       "processed with accrual",
 			order:      model.Order{Number: testNumber, Status: model.OrderStatusNew},
-			result:     client.Result{Order: testNumber, Status: client.StatusProcessed, Accrual: 50000},
+			result:     accrual.Result{Order: testNumber, Status: accrual.StatusProcessed, Accrual: 50000},
 			wantApp:    true,
 			wantStatus: model.OrderStatusProcessed, wantAccrual: 50000,
 		},
 		{
 			name:       "processed without accrual",
 			order:      model.Order{Number: testNumber, Status: model.OrderStatusProcessing},
-			result:     client.Result{Order: testNumber, Status: client.StatusProcessed},
+			result:     accrual.Result{Order: testNumber, Status: accrual.StatusProcessed},
 			wantApp:    true,
 			wantStatus: model.OrderStatusProcessed,
 		},
 		{
 			name:       "invalid",
 			order:      model.Order{Number: testNumber, Status: model.OrderStatusNew},
-			result:     client.Result{Order: testNumber, Status: client.StatusInvalid},
+			result:     accrual.Result{Order: testNumber, Status: accrual.StatusInvalid},
 			wantApp:    true,
 			wantStatus: model.OrderStatusInvalid,
 		},
 		{
 			name:       "registered moves new order to processing",
 			order:      model.Order{Number: testNumber, Status: model.OrderStatusNew},
-			result:     client.Result{Order: testNumber, Status: client.StatusRegistered},
+			result:     accrual.Result{Order: testNumber, Status: accrual.StatusRegistered},
 			wantApp:    true,
 			wantStatus: model.OrderStatusProcessing,
 		},
 		{
 			name:       "processing moves new order to processing",
 			order:      model.Order{Number: testNumber, Status: model.OrderStatusNew},
-			result:     client.Result{Order: testNumber, Status: client.StatusProcessing},
+			result:     accrual.Result{Order: testNumber, Status: accrual.StatusProcessing},
 			wantApp:    true,
 			wantStatus: model.OrderStatusProcessing,
 		},
 		{
 			name:       "accrual in intermediate status is ignored",
 			order:      model.Order{Number: testNumber, Status: model.OrderStatusNew},
-			result:     client.Result{Order: testNumber, Status: client.StatusProcessing, Accrual: 100},
+			result:     accrual.Result{Order: testNumber, Status: accrual.StatusProcessing, Accrual: 100},
 			wantApp:    true,
 			wantStatus: model.OrderStatusProcessing, wantAccrual: 0,
 		},
 		{
 			name:   "unchanged processing order is not written",
 			order:  model.Order{Number: testNumber, Status: model.OrderStatusProcessing},
-			result: client.Result{Order: testNumber, Status: client.StatusProcessing},
+			result: accrual.Result{Order: testNumber, Status: accrual.StatusProcessing},
 		},
 		{
 			name:  "not registered in accrual",
 			order: model.Order{Number: testNumber, Status: model.OrderStatusNew},
-			err:   client.ErrOrderNotRegistered,
+			err:   accrual.ErrOrderNotRegistered,
 		},
 		{
 			name:  "accrual error",
@@ -119,7 +119,7 @@ func TestWorker_Process_AlreadyFinalAndApplyError(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w, c, repo := newTestWorker(t, Config{})
 			c.EXPECT().GetOrder(gomock.Any(), testNumber).
-				Return(client.Result{Order: testNumber, Status: client.StatusProcessed, Accrual: 100}, nil)
+				Return(accrual.Result{Order: testNumber, Status: accrual.StatusProcessed, Accrual: 100}, nil)
 			repo.EXPECT().ApplyAccrual(gomock.Any(), testNumber, model.OrderStatusProcessed, model.Amount(100)).
 				Return(false, applyErr)
 
@@ -131,7 +131,7 @@ func TestWorker_Process_AlreadyFinalAndApplyError(t *testing.T) {
 func TestWorker_Process_RateLimitPausesAllRequests(t *testing.T) {
 	w, c, _ := newTestWorker(t, Config{})
 	c.EXPECT().GetOrder(gomock.Any(), testNumber).
-		Return(client.Result{}, &client.RateLimitError{RetryAfter: time.Hour})
+		Return(accrual.Result{}, &accrual.RateLimitError{RetryAfter: time.Hour})
 
 	w.process(context.Background(), model.Order{Number: testNumber, Status: model.OrderStatusNew})
 
@@ -155,7 +155,7 @@ func TestWorker_Poll(t *testing.T) {
 	var mu sync.Mutex
 	seen := map[string]bool{}
 	c.EXPECT().GetOrder(gomock.Any(), gomock.Any()).Times(len(orders)).
-		DoAndReturn(func(_ context.Context, number string) (client.Result, error) {
+		DoAndReturn(func(_ context.Context, number string) (accrual.Result, error) {
 			n := inFlight.Add(1)
 			for {
 				m := maxInFlight.Load()
@@ -169,7 +169,7 @@ func TestWorker_Poll(t *testing.T) {
 			mu.Lock()
 			seen[number] = true
 			mu.Unlock()
-			return client.Result{Order: number, Status: client.StatusInvalid}, nil
+			return accrual.Result{Order: number, Status: accrual.StatusInvalid}, nil
 		})
 	repo.EXPECT().ApplyAccrual(gomock.Any(), gomock.Any(), model.OrderStatusInvalid, model.Amount(0)).
 		Times(len(orders)).Return(true, nil)
@@ -209,24 +209,24 @@ func TestWorker_Run_StopsOnContextCancel(t *testing.T) {
 func TestNextState(t *testing.T) {
 	tests := []struct {
 		name        string
-		in          client.Result
+		in          accrual.Result
 		wantStatus  model.OrderStatus
 		wantAccrual model.Amount
 		wantOK      bool
 	}{
-		{name: "registered", in: client.Result{Status: client.StatusRegistered}, wantStatus: model.OrderStatusProcessing, wantOK: true},
-		{name: "processing", in: client.Result{Status: client.StatusProcessing}, wantStatus: model.OrderStatusProcessing, wantOK: true},
-		{name: "processing ignores accrual", in: client.Result{Status: client.StatusProcessing, Accrual: 100}, wantStatus: model.OrderStatusProcessing, wantOK: true},
-		{name: "invalid", in: client.Result{Status: client.StatusInvalid}, wantStatus: model.OrderStatusInvalid, wantOK: true},
-		{name: "processed", in: client.Result{Status: client.StatusProcessed, Accrual: 50050}, wantStatus: model.OrderStatusProcessed, wantAccrual: 50050, wantOK: true},
-		{name: "unknown", in: client.Result{Status: "UNKNOWN"}, wantOK: false},
+		{name: "registered", in: accrual.Result{Status: accrual.StatusRegistered}, wantStatus: model.OrderStatusProcessing, wantOK: true},
+		{name: "processing", in: accrual.Result{Status: accrual.StatusProcessing}, wantStatus: model.OrderStatusProcessing, wantOK: true},
+		{name: "processing ignores accrual", in: accrual.Result{Status: accrual.StatusProcessing, Accrual: 100}, wantStatus: model.OrderStatusProcessing, wantOK: true},
+		{name: "invalid", in: accrual.Result{Status: accrual.StatusInvalid}, wantStatus: model.OrderStatusInvalid, wantOK: true},
+		{name: "processed", in: accrual.Result{Status: accrual.StatusProcessed, Accrual: 50050}, wantStatus: model.OrderStatusProcessed, wantAccrual: 50050, wantOK: true},
+		{name: "unknown", in: accrual.Result{Status: "UNKNOWN"}, wantOK: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, accrual, ok := nextState(tt.in)
+			status, amount, ok := nextState(tt.in)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantStatus, status)
-			assert.Equal(t, tt.wantAccrual, accrual)
+			assert.Equal(t, tt.wantAccrual, amount)
 		})
 	}
 }

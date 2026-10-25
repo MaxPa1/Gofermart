@@ -17,7 +17,7 @@ import (
 
 	"github.com/MaxPa1/Gofermart/internal/auth/password"
 	"github.com/MaxPa1/Gofermart/internal/auth/token"
-	accrualclient "github.com/MaxPa1/Gofermart/internal/client/accrual"
+	"github.com/MaxPa1/Gofermart/internal/client/accrual"
 	"github.com/MaxPa1/Gofermart/internal/config"
 	"github.com/MaxPa1/Gofermart/internal/repository"
 	"github.com/MaxPa1/Gofermart/internal/service/auth"
@@ -25,7 +25,7 @@ import (
 	"github.com/MaxPa1/Gofermart/internal/service/orders"
 	"github.com/MaxPa1/Gofermart/internal/transport/rest"
 	"github.com/MaxPa1/Gofermart/internal/transport/rest/handler"
-	accrualworker "github.com/MaxPa1/Gofermart/internal/worker/accrual"
+	"github.com/MaxPa1/Gofermart/internal/worker/accrualpoller"
 )
 
 const (
@@ -90,11 +90,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 	balanceService := balance.NewService(balanceRepo)
 	balanceHandler := handler.NewBalanceHandler(balanceService, logger)
 
-	accrual, err := accrualclient.New(cfg.AccrualAddress, cfg.Accrual.RequestTimeout)
+	accrualClient, err := accrual.New(cfg.AccrualAddress, cfg.Accrual.RequestTimeout)
 	if err != nil {
 		return fmt.Errorf("create accrual client: %w", err)
 	}
-	worker := accrualworker.New(accrual, repository.NewAccrualRepository(pool), accrualworker.Config{
+	worker := accrualpoller.New(accrualClient, repository.NewAccrualRepository(pool), accrualpoller.Config{
 		PollInterval: cfg.Accrual.PollInterval,
 		BatchSize:    cfg.Accrual.BatchSize,
 		Workers:      cfg.Accrual.Workers,

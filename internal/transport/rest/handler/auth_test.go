@@ -115,7 +115,9 @@ func TestAuthHandler_BadRequestBody(t *testing.T) {
 		{name: "not an object", body: `["gopher","pass"]`, wantStatus: http.StatusBadRequest},
 		{name: "wrong field type", body: `{"login":123,"password":"p"}`, wantStatus: http.StatusBadRequest},
 		{name: "unknown field", body: `{"login":"gopher","passwrd":"p"}`, wantStatus: http.StatusBadRequest},
-		{name: "too large", body: `{"login":"` + strings.Repeat("a", maxCredentialsBodySize) + `"}`, wantStatus: http.StatusRequestEntityTooLarge},
+		{name: "trailing data", body: `{"login":"gopher","password":"p"} garbage`, wantStatus: http.StatusBadRequest},
+		{name: "two objects", body: `{"login":"gopher","password":"p"}{"login":"other","password":"p"}`, wantStatus: http.StatusBadRequest},
+		{name: "too large", body: `{"login":"` + strings.Repeat("a", maxJSONBodySize) + `"}`, wantStatus: http.StatusRequestEntityTooLarge},
 	}
 	for _, ep := range endpoints {
 		for _, tt := range tests {
